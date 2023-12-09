@@ -1,0 +1,198 @@
+# Design
+
+The system consists of a server program and a client program. The client program has two threads, one for sending Packet A every 100ms and another for sending Packet B every 150ms.
+
+The packets sent by the client program are of two types:
+
+1. Packet A - sent every 100ms
+2. Packet B - sent every 150ms
+
+The server program is responsible for receiving and processing the packets sent by the client program.
+
+### Server Program
+
+server program contains 4 thread 
+
+1. packet1_handler / packet1_reciever :- this thread process all the packet of type 1
+2. packet2_handler / packet2_reciever :- this thread process all the packet of type 2
+3. Error_handler : thread that is responsible for checking error in the incoming packet
+4. status_handler : this thread print the status i.e, no of packets of type 1 and type 2 , at every  5 s
+
+now in threading all the threads shares the same memmory address , so there should be synchronous technique like semaphore to prevent from race around condition etc,
+
+so will lock the variable in every thread , so others dont change it in between 
+
+following are psuedocode
+
+ 
+
+Status Handler
+
+```code
+
+status_handler(){
+
+  while( True ){
+    print("=============Packet Status=============\n")
+    print("Packet1 count: %d\n",p1_count)
+    print("Packet2 count: %d\n",p2_count)
+	}
+	   sleep(5)
+  }
+  return 
+}
+
+```
+
+ p1_count ; is  a atomic global variable that keeps track of the number of packet of type 1
+
+while p2_count  keep tracks fo the number of packet of type 2
+
+Error Handler
+
+```code
+
+Error_handler(packet){
+
+	mutexLock(mutex)
+
+	temp=NULL;
+	//destrucutring packet 	
+		type = packet.type
+		sequence = packet.sequence
+		data = packet.payload
+		checksum = packet.checksum
+
+	  checksum_calc=calculateChecksum(packet)  <-- calculate the checksum of the packet
+
+	mutexUnlock
+		
+	  if( checksum_calc = checksum )
+	    return true
+
+	  return false
+}
+
+```
+
+packet1_handler
+
+```code
+
+packet1_handler(packet){
+
+		mutexLock(mutex)   //there is pthread_mutex_lock(mutex) semaphore in pthread library
+
+		type = packet.type
+		sequence = packet.sequence
+		data = packet.payload
+		checksum = packet.checksum
+
+		if(type == 1 )
+				p1_count++
+		else
+				return 	
+
+  print("[+] Packet 1 received ")
+
+	mutexUnlock(mutex)
+
+  return 
+}
+
+```
+
+packet2_handler is also similer 
+
+just the type has to check against no 2
+
+now in the main program
+
+main
+
+```c
+main(){
+	
+	sockfd = socket(AF_INET, SOCK_DGRAM, 0)
+
+  thread errorth   <--thread handling errors in packets
+	thread p1th   <-- thread handling p1 packets
+	thread p2th    <-- thread handling p2 packets
+	thread statusth;   <-- thread handling status
+
+  thread_create(statusth, status_handler, ...)
+
+    while( true ){
+
+	    recvfrom(sockfd, packet, PACKET_SIZE, 0 , ...)
+      pthread_create(&p1th, NULL, packet1_handler, packet)  <-- calls the packet1_handlrer under thread p1th
+      pthread_create(&p2th, NULL, packet2_handler, packet)  <-- calls the packet2_handlrer under thread p2th
+  }
+
+  close(sockfd)
+}
+```
+
+make to sure run the server program before client program 
+
+### Client Program
+
+Psuedocode
+
+```
+Packet1Handler() {
+
+		while( true ){
+    packet p1;
+    p1.type = 1
+    p1.seq = (p1_count++)
+
+    p1.payload = "packet type 1"
+
+    p1.checksum = checksum(p1) <-- returns the checksum of the packet   
+    
+
+   
+    p1_str = p1.type + p1.seq + p1.payload + p1.checksum
+
+    sendto(p1_str, ... )  -> send the packet p1 to the server
+
+    usleep(1000);   --> sleep for 100ms
+  }
+
+}
+```
+
+similarly there is a function Packet2Handler() with same content except
+
+```code
+
+p1.type = 2;
+p1.seq = p1_count++;
+```
+
+Now inside main function 
+
+```code
+
+main(){
+		
+
+	sockfd = socket(AF_INET, SOCK_DGRAM, 0)  <--UDP Socket
+
+  serverAddr.sin_family = AF_INET
+  serverAddr.sin_port = PORT     <-- give the servers Port number
+  serverAddr.sin_addr.s_addr = inet_addr(IP)  <-- give the server IP Address
+
+  connect(sockfd, serverAddr, len(serverAddr) )
+  
+  pthread_t packet1 , packet2
+
+  pthread_create(packet1, packet1_handler ,...) <-- runs the function in the thread packet1
+  pthread_create(packet2, packet2_handler , ...)  <-- runs the function in the thread packet2
+
+  close(sockfd)  <-- closes the socket
+
+	  return 0;
+}
+```
